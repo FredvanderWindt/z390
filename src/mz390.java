@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License along
 with this program; if not, see <https://www.gnu.org/licenses/>.
 */
 
+import java.util.ArrayList;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -24,6 +25,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.lang.reflect.Array;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -439,6 +441,7 @@ public  class  mz390 {
 	 * 2022-02-08 dsh #335 fix bug in insert_acall_parms not checking for no parms and returning
 	 * 2022-03-26 DSH #335 rename opcode APARM to ACALLPRM to allow APARM macro
 	 * 2022-04-07 DSH #215 prevent SETC statement character string processing from reducing && to &
+	 * 2022-08-22 #58 Support for SETCF
 	 ********************************************************
 	 * Global variables                       (last RPI)
 	 *****************************************************/
@@ -1268,6 +1271,11 @@ public  class  mz390 {
 			pc_op_storv};
 	boolean pc_trace_gen = false;
 	String  pc_trace_sub  = null;
+	/*
+	 * SETxF
+	 */
+	SETxF SETxF = null;
+	ArrayList<String> SETxF_mac = new ArrayList<String>();
 	/*
 	 * end of global mz390 class data and start of procs
 	 */
@@ -4309,6 +4317,28 @@ public  class  mz390 {
 				}
 			}
 			break;
+        case 219:  // SETCF     
+            bal_op_ok = true;
+            String[] setcf_parms  = null;
+            int setcf_nparms = 0;
+            if (!tz390.opt_allow // HLASM compat required       
+                && bal_parms.length() > 1
+                && bal_parms.charAt(0) == '&'
+                ){
+                // For HLASM compatibility
+                // don't allow SETC parm variable without quotes
+                log_error(227,"missing quotes for SETC operand");
+            }
+            exp_next_index = 0;
+            setcf_parms  =  bal_parms.split(",");
+            bal_parms = bal_parms.replace(",", ".','.");
+            bal_parms = calc_setc_exp(bal_parms,exp_next_index);
+            setcf_parms  =  bal_parms.split(",");
+            setcf_nparms = setcf_parms.length;
+            mac_op_type = 218; //Now SETCF becomes SETC    
+            bal_parms = setcf_invoke_external(setcf_nparms, String.join("," , (CharSequence[])setcf_parms));
+            SETxF_mac.add(gbl_sysmac);
+            // NOTE: falls through to case 218 intentionally!!
 		case 218:  // SETC
 			bal_op_ok = true;
 			get_set_target(var_setc_type);
@@ -4356,8 +4386,6 @@ public  class  mz390 {
 					gen_pc(pc_op_stori); // RPI 839
 				}
 			}
-			break;
-		case 219:  // SETCF
 			break;
 		case 220:  // MACRO
 			bal_op_ok = true;
@@ -8124,20 +8152,20 @@ public  class  mz390 {
 	}
 	private int find_mac_entry(String macro_name){
 		/*
-		 * return mac_name index if found else -1
-		 *
-		 * 1. Note load_mac adds entry with -2
-		 *    index to prevent mult search for
+		 * return mac_name index if found else -1 
+		 * 
+		 * 1. Note load_mac adds entry with -2 
+		 *    index to prevent mult search for 
 		 *    macros not found.
-		 * 2.  If MFC option on, then instructions and
-		 *     assembler control statements will not be
-		 *     expanded as macros.
-		 * 3.  Any non-conditional macro operator can be
-		 *     expanded via an inline macro that can be
-		 *     defined via COPY statement.
+		 * 2. If MFC option on, then instructions and
+		 *    assembler control statements will not be
+		 *    expanded as macros.
+		 * 3. Any non-conditional macro operator can be
+		 *    expanded via an inline macro that can be
+		 *    defined via COPY statement.
 		 */
 		int index = tz390.find_key_index('M',macro_name.toUpperCase());
-		if (index != -1){
+		if (index != -1 && !SETxF_mac.contains(macro_name)){
 			if (index == -2){
 				// rpi 1213 move check_sysops();
 			}
@@ -12665,4 +12693,32 @@ public  class  mz390 {
 		exp_next_index = index+1; // RPI 1139 skip )
 		return dim;
 	}
+  /* JNI version*/
+  private String setcf_invoke_external( int setcf_nparms, String setcf_parms){
+      int ret = 0;
+
+      try {
+          if( setcf_nparms < 2) {
+              abort_error(250,"invalid number of parameters for SETCF operand");    
+          } else {    
+              SETxF = new SETxF();
+              if((ret=SETxF.SETCF("SETCF",Integer.toString(setcf_parms.length()),setcf_parms))!=0) {
+                  abort_error(252,"SETCF returned with return code: " + Integer.toString(ret));
+              }          
+
+              if (!"0".equals(SETxF.getRQS_RTR_COD())) {
+            	  abort_error(252,"SETCF exit returned with return code: " + SETxF.getRQS_RTR_COD());
+              } else {
+	              return new StringBuilder()
+	                       .append('\'')
+	                       .append(new String(SETxF.getRQS_TKN_DAT()).trim())
+	                       .append('\'')
+	                       .toString();  
+              }
+          }
+      } catch( Exception ex) {
+          ex.printStackTrace();
+      }
+      return null;
+  }    
 }

@@ -314,7 +314,8 @@ public  class  tz390 {
 	* 2021-09-07 dsh #230 fix E7CC option, fix E7C0-E7C7 OR 8 with operand
 	* 2022-01-16 DSH #343 increase maxline from 200000 to 400000 for rpi\zivp.asm from Dan Greiner
 	* 2022-01-22 DSH #335 acall - restored APARM used to set &(acall)(n) just before aentry
-		 * 2022-03-26 DSH #375 change APARM opcode directive from APARM to ACALLPRM
+	* 2022-03-26 DSH #375 change APARM opcode directive from APARM to ACALLPRM
+	* 2022-08-22 #58 Support for SETCF
 	********************************************************
 	* Shared z390 tables                  (last RPI)
 	*****************************************************/
@@ -434,7 +435,7 @@ public  class  tz390 {
 	int opt_maxcall  = 50;
 	int opt_maxdisplay = 80; // RPI 1118 max display line length for zcobol
 	int opt_maxesd   = 1000;
-	int opt_maxfile = 1000;     // RPI 707 max concourrent files open
+	int opt_maxfile = 3000;
 	int opt_maxgbl  = 100000;   // RPI 284
 	int opt_maxlcl  = 100000;
 	int opt_maxline = 400000;  // issue #343 increased from 200000 to 400000
